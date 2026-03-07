@@ -89,25 +89,80 @@ if st.button("Submit Complaint"):
 st.header("Complaint Dashboard")
 
 if len(st.session_state.complaints) > 0:
+
     df = pd.DataFrame(st.session_state.complaints)
-    st.dataframe(df)
-st.header("City Complaint Map")
+
+    st.dataframe(df.rename(columns={
+    "complaint": "Complaint",
+    "location": "Location",
+    "category": "Category",
+    "department": "Department",
+    "urgency": "Urgency"
+}))
+
+else:
+    st.write("No complaints submitted yet.")
+
+if len(st.session_state.complaints) > 0:
+
+    df = pd.DataFrame(st.session_state.complaints)
+
+    high = len(df[df["urgency"] == "High"])
+    medium = len(df[df["urgency"] == "Medium"])
+    low = len(df[df["urgency"] == "Low"])
+
+    st.subheader("Complaint Summary")
+
+    st.write("🔴 High Urgency Complaints:", high)
+    st.write("🟠 Medium Urgency Complaints:", medium)
+    st.write("🟢 Low Urgency Complaints:", low)
+
+else:
+    st.write("No complaints submitted yet.")
+
+st.subheader("Complaint Summary")
+
 
 m = folium.Map(location=[32.37, -86.30], zoom_start=12)
 
 for c in st.session_state.complaints:
 
-    color = "green"
-
     if c["urgency"] == "High":
         color = "red"
     elif c["urgency"] == "Medium":
         color = "orange"
+    else:
+        color = "green"
+
+    popup_text = f"""
+    Complaint: {c['complaint']}
+    Location: {c['location']}
+    Category: {c['category']}
+    Urgency: {c['urgency']}
+    """
 
     folium.Marker(
         [32.37, -86.30],
-        popup=f"{c['complaint']} ({c['urgency']})",
+        popup=popup_text,
         icon=folium.Icon(color=color)
     ).add_to(m)
 
 st_folium(m, width=700)            
+st.header("City Insights")
+
+if len(st.session_state.complaints) > 0:
+
+    df = pd.DataFrame(st.session_state.complaints)
+
+    # total complaints
+    total = len(df)
+
+    # most common complaint category
+    top_category = df["category"].value_counts().idxmax()
+
+    # number of high urgency complaints
+    high_urgency = len(df[df["urgency"] == "High"])
+
+    st.write("Total Complaints:", total)
+    st.write("Most Common Issue:", top_category)
+    st.write("High Urgency Complaints:", high_urgency)
