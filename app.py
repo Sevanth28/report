@@ -1,4 +1,10 @@
 import streamlit as st
+import pandas as pd
+import folium
+from streamlit_folium import st_folium
+
+if "complaints" not in st.session_state:
+    st.session_state.complaints = []
 
 def classify_complaint(text):
 
@@ -50,18 +56,58 @@ location = st.text_input("Location")
 
 if st.button("Submit Complaint"):
 
+    # Check if complaint box is empty
     if complaint.strip() == "":
         st.error("Please enter a complaint.")
+
     else:
+        # Run the AI classification
         result = classify_complaint(complaint)
 
+        # Show success message
         st.success("Complaint analyzed!")
 
+        # Show what user entered
         st.write("Complaint:", complaint)
         st.write("Location:", location)
 
+        # Show AI results
         st.subheader("AI Analysis")
 
         st.write("Category:", result["Category"])
         st.write("Department:", result["Department"])
         st.write("Urgency:", result["Urgency"])
+
+        # Save complaint into storage
+        st.session_state.complaints.append({
+            "complaint": complaint,
+            "location": location,
+            "category": result["Category"],
+            "department": result["Department"],
+            "urgency": result["Urgency"]
+        })
+st.header("Complaint Dashboard")
+
+if len(st.session_state.complaints) > 0:
+    df = pd.DataFrame(st.session_state.complaints)
+    st.dataframe(df)
+st.header("City Complaint Map")
+
+m = folium.Map(location=[32.37, -86.30], zoom_start=12)
+
+for c in st.session_state.complaints:
+
+    color = "green"
+
+    if c["urgency"] == "High":
+        color = "red"
+    elif c["urgency"] == "Medium":
+        color = "orange"
+
+    folium.Marker(
+        [32.37, -86.30],
+        popup=f"{c['complaint']} ({c['urgency']})",
+        icon=folium.Icon(color=color)
+    ).add_to(m)
+
+st_folium(m, width=700)            
