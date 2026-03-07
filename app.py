@@ -362,7 +362,7 @@ elif page=="Dashboard":
             "complaints.csv"
         )
 
-# CITY MAP (FIXED VERSION)
+# CITY MAP (UNCHANGED)
 elif page=="City Map":
 
     st.title("City Issue Map")
@@ -455,22 +455,27 @@ elif page=="Risk Dashboard":
 
         st.metric("City Risk Level",level)
 
-# EMERGENCY ALERTS
+# EMERGENCY ALERTS (FIXED)
 elif page=="Emergency Alerts":
 
     st.title("Emergency Alerts")
 
     df=pd.DataFrame(st.session_state.complaints)
 
-    alerts=df[df["urgency"]=="High"]
-
-    if len(alerts)==0:
+    if len(df)==0 or "urgency" not in df.columns:
         st.success("No emergencies")
 
     else:
 
-        for _,row in alerts.iterrows():
+        alerts = df[df["urgency"]=="High"]
 
-            st.error(
-                f"🚨 {row['summary']} at {row['location']}"
-            )
+        if len(alerts)==0:
+            st.success("No emergencies")
+
+        else:
+
+            for _,row in alerts.iterrows():
+
+                st.error(
+                    f"🚨 {row['summary']} at {row['location']}"
+                )
