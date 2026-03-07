@@ -13,45 +13,29 @@ from streamlit_autorefresh import st_autorefresh
 
 st.set_page_config(page_title="Smart City AI Command Center", layout="wide")
 
-# -------------------------
 # GOVERNMENT PASSWORD
-# -------------------------
-
 GOV_PASSWORD = "smartcity2026"
 
-# -------------------------
 # AUTO REFRESH
-# -------------------------
-
 st_autorefresh(interval=10000, key="refresh")
 
-# -------------------------
 # GEOLOCATOR
-# -------------------------
-
 geolocator = Nominatim(user_agent="smart_city_ai")
 
-# -------------------------
 # SESSION STORAGE
-# -------------------------
-
 if "complaints" not in st.session_state:
     st.session_state.complaints = []
 
 if "gov_logged_in" not in st.session_state:
     st.session_state.gov_logged_in = False
 
-# -------------------------
 # LOAD CITY DATA
-# -------------------------
-
 @st.cache_data(ttl=300)
 def load_city_data():
 
     url = "https://data.montgomeryal.gov/resource/8u7v-jw6c.json"
 
     try:
-
         r = requests.get(url)
         data = r.json()
 
@@ -68,10 +52,7 @@ def load_city_data():
 
 city_df = load_city_data()
 
-# -------------------------
 # AI SUMMARY
-# -------------------------
-
 def summarize(text):
 
     blob = TextBlob(text)
@@ -81,10 +62,7 @@ def summarize(text):
 
     return text[:80]
 
-# -------------------------
 # URGENCY DETECTION
-# -------------------------
-
 def detect_urgency(text):
 
     text = text.lower()
@@ -109,10 +87,7 @@ def detect_urgency(text):
     else:
         return "Low"
 
-# -------------------------
 # CLASSIFIER
-# -------------------------
-
 def classify(text):
 
     text = text.lower()
@@ -134,10 +109,7 @@ def classify(text):
 
     return "General","City Services"
 
-# -------------------------
 # GEO FUNCTIONS
-# -------------------------
-
 def get_coordinates(location):
 
     try:
@@ -165,10 +137,7 @@ def reverse_geocode(lat,lon):
 
     return f"{lat},{lon}"
 
-# -------------------------
 # SIDEBAR
-# -------------------------
-
 st.sidebar.title("Smart City System")
 
 page = st.sidebar.radio(
@@ -185,10 +154,7 @@ page = st.sidebar.radio(
     ]
 )
 
-# -------------------------
 # CITIZEN PORTAL
-# -------------------------
-
 if page == "Citizen Portal":
 
     st.title("Citizen Complaint Portal")
@@ -276,10 +242,7 @@ if page == "Citizen Portal":
 
             st.success(f"Complaint Submitted. Your ID: {complaint_id}")
 
-# -------------------------
 # TRACK COMPLAINT
-# -------------------------
-
 elif page == "Track Complaint":
 
     st.title("Track Complaint")
@@ -314,10 +277,7 @@ elif page == "Track Complaint":
             elif status=="Resolved":
                 st.success("Issue resolved")
 
-# -------------------------
 # GOVERNMENT PORTAL
-# -------------------------
-
 elif page == "Government Portal":
 
     st.title("Government Control Panel")
@@ -376,10 +336,7 @@ elif page == "Government Portal":
 
             st.divider()
 
-# -------------------------
 # DASHBOARD
-# -------------------------
-
 elif page=="Dashboard":
 
     st.title("City Dashboard")
@@ -405,25 +362,32 @@ elif page=="Dashboard":
             "complaints.csv"
         )
 
-# -------------------------
-# CITY MAP
-# -------------------------
-
+# CITY MAP (FIXED VERSION)
 elif page=="City Map":
 
     st.title("City Issue Map")
 
-    m=folium.Map(location=[32.37,-86.30],zoom_start=12)
+    df = pd.DataFrame(st.session_state.complaints)
+
+    if len(df) > 0:
+        df["lat"] = pd.to_numeric(df["lat"], errors="coerce")
+        df["lon"] = pd.to_numeric(df["lon"], errors="coerce")
+
+    if len(df) > 0 and df["lat"].notnull().any():
+        center_lat = df["lat"].mean()
+        center_lon = df["lon"].mean()
+    else:
+        center_lat, center_lon = 32.37, -86.30
+
+    m=folium.Map(location=[center_lat,center_lon],zoom_start=12)
 
     cluster=MarkerCluster().add_to(m)
 
     heat=[]
 
-    df=pd.DataFrame(st.session_state.complaints)
-
     for _,row in df.iterrows():
 
-        if pd.notnull(row["lat"]):
+        if pd.notnull(row["lat"]) and pd.notnull(row["lon"]):
 
             folium.Marker(
                 [row["lat"],row["lon"]],
@@ -450,10 +414,7 @@ elif page=="City Map":
 
     st_folium(m,width=900,height=600)
 
-# -------------------------
 # ANALYTICS
-# -------------------------
-
 elif page=="Analytics":
 
     st.title("City Analytics")
@@ -465,10 +426,7 @@ elif page=="Analytics":
         st.bar_chart(df["department"].value_counts())
         st.bar_chart(df["location"].value_counts())
 
-# -------------------------
 # RISK DASHBOARD
-# -------------------------
-
 elif page=="Risk Dashboard":
 
     st.title("City Risk Prediction")
@@ -497,10 +455,7 @@ elif page=="Risk Dashboard":
 
         st.metric("City Risk Level",level)
 
-# -------------------------
 # EMERGENCY ALERTS
-# -------------------------
-
 elif page=="Emergency Alerts":
 
     st.title("Emergency Alerts")
