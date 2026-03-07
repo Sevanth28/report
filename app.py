@@ -2,14 +2,13 @@ import streamlit as st
 import pandas as pd
 import folium
 import requests
-import pydeck as pdk
 from streamlit_folium import st_folium
 from folium.plugins import HeatMap, MarkerCluster
 from datetime import datetime
 from geopy.geocoders import Nominatim
 from textblob import TextBlob
-from streamlit_js_eval import get_geolocation
 from streamlit_autorefresh import st_autorefresh
+from PIL import Image
 
 st.set_page_config(page_title="Smart City AI Command Center", layout="wide")
 
@@ -89,7 +88,21 @@ def reverse_geocode(lat, lon):
     return f"{lat},{lon}"
 
 # -------------------------
-# URGENCY AI
+# AI SUMMARIZER
+# -------------------------
+
+def summarize(text):
+
+    blob = TextBlob(text)
+    sentences = blob.sentences
+
+    if len(sentences) > 1:
+        return str(sentences[0])
+
+    return text[:80]
+
+# -------------------------
+# URGENCY DETECTION
 # -------------------------
 
 def detect_urgency(text):
@@ -141,6 +154,9 @@ def classify(text):
     elif "traffic" in text:
         return "Traffic","Traffic Department",urgency
 
+    elif "pothole" in text:
+        return "Road Damage","Road Department",urgency
+
     else:
         return "General","City Services",urgency
 
@@ -152,68 +168,79 @@ st.sidebar.title("Smart City Command Center")
 
 page = st.sidebar.radio(
     "Navigation",
-    ["Submit Complaint","Dashboard","City Map","Analytics","Risk Dashboard","3D Heatmap"]
+    [
+        "Submit Complaint",
+        "Dashboard",
+        "City Map",
+        "Analytics",
+        "Risk Dashboard",
+        "Emergency Alerts"
+    ]
 )
 
 # -------------------------
-# SUBMIT PAGE
+# SUBMIT COMPLAINT
 # -------------------------
 
 if page == "Submit Complaint":
 
     st.title("Submit Complaint")
 
-    complaint = st.text_area("Describe issue")
+    with st.form("complaint_form", clear_on_submit=True):
 
-    location = st.text_input("Enter location")
+        complaint = st.text_area("Describe issue")
 
-    lat = None
-    lon = None
-    address = location
+        location = st.text_input("Enter location")
 
-    if location:
-        lat,lon,address = get_coordinates(location)
+        image = st.file_uploader("Upload Photo of Issue", type=["jpg","png","jpeg"])
 
-    if st.button("Use Current Location"):
+        if image:
+            st.image(image,width=300)
 
-        gps = get_geolocation()
+        lat = None
+        lon = None
+        address = location
 
-        if gps:
-            lat = gps["coords"]["latitude"]
-            lon = gps["coords"]["longitude"]
+        if location:
+            lat,lon,address = get_coordinates(location)
+
+        st.subheader("Select location on map")
+
+        map_select = folium.Map(location=[32.37,-86.30],zoom_start=12)
+
+        map_data = st_folium(map_select,height=400)
+
+        if map_data and map_data["last_clicked"]:
+
+            lat = map_data["last_clicked"]["lat"]
+            lon = map_data["last_clicked"]["lng"]
+
             address = reverse_geocode(lat,lon)
 
-    st.subheader("Select location on map")
+        submitted = st.form_submit_button("Submit Complaint")
 
-    map_select = folium.Map(location=[32.37,-86.30],zoom_start=12)
+        if submitted:
 
-    map_data = st_folium(map_select,height=400)
+            category,department,urgency = classify(complaint)
 
-    if map_data and map_data["last_clicked"]:
+            summary = summarize(complaint)
 
-        lat = map_data["last_clicked"]["lat"]
-        lon = map_data["last_clicked"]["lng"]
+            st.session_state.complaints.append({
 
-        address = reverse_geocode(lat,lon)
+                "complaint":complaint,
+                "summary":summary,
+                "location":address,
+                "category":category,
+                "department":department,
+                "urgency":urgency,
+                "lat":lat,
+                "lon":lon,
+                "image":image,
+                "time":datetime.now()
 
-    if st.button("Submit Complaint"):
+            })
 
-        category,department,urgency = classify(complaint)
-
-        st.session_state.complaints.append({
-
-            "complaint":complaint,
-            "location":address,
-            "category":category,
-            "department":department,
-            "urgency":urgency,
-            "lat":lat,
-            "lon":lon,
-            "time":datetime.now()
-
-        })
-
-        st.success("Complaint submitted")
+            st.success("Complaint submitted successfully!")
 
 # -------------------------
 # DASHBOARD
@@ -237,15 +264,7 @@ elif page == "Dashboard":
         c3.metric("Medium Urgency",len(df[df["urgency"]=="Medium"]))
         c4.metric("Low Urgency",len(df[df["urgency"]=="Low"]))
 
-        st.subheader("Live Complaint Feed")
-
-        st.dataframe(df.sort_values("time",ascending=False))
-
-        st.download_button(
-            "Download Complaints CSV",
-            df.to_csv(index=False),
-            "complaints.csv"
-        )
+        st.dataframe(df[["summary","location","department","urgency","time"]].sort_values("time",ascending=False))
 
 # -------------------------
 # CITY MAP
@@ -261,28 +280,16 @@ elif page == "City Map":
 
     heat=[]
 
-    citizen_df = pd.DataFrame(st.session_state.complaints)
+    df = pd.DataFrame(st.session_state.complaints)
 
-    for _,row in citizen_df.iterrows():
+    for _,row in df.iterrows():
 
         if pd.notnull(row["lat"]) and pd.notnull(row["lon"]):
 
             folium.Marker(
                 [row["lat"],row["lon"]],
-                popup=row["complaint"],
+                popup=row["summary"],
                 icon=folium.Icon(color="red")
-            ).add_to(cluster)
-
-            heat.append([row["lat"],row["lon"]])
-
-    for _,row in city_df.iterrows():
-
-        if "lat" in row and pd.notnull(row["lat"]):
-
-            folium.Marker(
-                [row["lat"],row["lon"]],
-                popup="City Data",
-                icon=folium.Icon(color="blue")
             ).add_to(cluster)
 
             heat.append([row["lat"],row["lon"]])
@@ -307,10 +314,7 @@ elif page == "Analytics":
 
     else:
 
-        st.subheader("Department Workload")
         st.bar_chart(df["department"].value_counts())
-
-        st.subheader("Location Hotspots")
         st.bar_chart(df["location"].value_counts())
 
 # -------------------------
@@ -319,12 +323,12 @@ elif page == "Analytics":
 
 elif page == "Risk Dashboard":
 
-    st.title("City Risk Score Dashboard")
+    st.title("City Risk Prediction Dashboard")
 
     df = pd.DataFrame(st.session_state.complaints)
 
     if len(df)==0:
-        st.info("No data")
+        st.info("No risk data yet")
 
     else:
 
@@ -339,63 +343,59 @@ elif page == "Risk Dashboard":
 
         df["risk"] = df.apply(risk_score,axis=1)
 
-        risk = df.groupby("location")["risk"].sum()
+        total_risk = df["risk"].sum()
 
-        risk_df = risk.sort_values(ascending=False).reset_index()
+        if total_risk < 10:
+            level = "Low"
+        elif total_risk < 25:
+            level = "Moderate"
+        elif total_risk < 50:
+            level = "High"
+        else:
+            level = "Critical"
 
+        st.metric("City Risk Level", level)
+        st.metric("Total Risk Score", total_risk)
+
+        risk_df = df.groupby("location")["risk"].sum().sort_values(ascending=False).reset_index()
         risk_df.columns=["Location","Risk Score"]
 
         st.dataframe(risk_df)
-
         st.bar_chart(risk_df.set_index("Location"))
 
 # -------------------------
-# 3D HEATMAP
+# EMERGENCY ALERTS
 # -------------------------
 
-elif page == "3D Heatmap":
+elif page == "Emergency Alerts":
 
-    st.title("3D City Issue Heatmap")
+    st.title("🚨 Live Emergency Alerts")
 
     df = pd.DataFrame(st.session_state.complaints)
 
     if len(df)==0:
-        st.info("No complaint data")
+        st.info("No alerts")
 
     else:
 
-        df = df.dropna(subset=["lat","lon"])
+        alerts = df[df["urgency"]=="High"]
 
-        if len(df)==0:
-            st.info("No location data available")
+        if len(alerts)==0:
+            st.success("No emergency alerts")
 
         else:
 
-            df["lat"] = pd.to_numeric(df["lat"])
-            df["lon"] = pd.to_numeric(df["lon"])
+            st.error("⚠ HIGH PRIORITY INCIDENTS DETECTED")
 
-            layer = pdk.Layer(
-                "HexagonLayer",
-                data=df,
-                get_position="[lon, lat]",
-                radius=200,
-                elevation_scale=4,
-                elevation_range=[0,1000],
-                pickable=True,
-                extruded=True,
-            )
+            for _,row in alerts.iterrows():
 
-            view_state = pdk.ViewState(
-                latitude=df["lat"].mean(),
-                longitude=df["lon"].mean(),
-                zoom=11,
-                pitch=50,
-            )
+                st.warning(
+                    f"""
+                    🚨 **Emergency Issue**
 
-            deck = pdk.Deck(
-                layers=[layer],
-                initial_view_state=view_state,
-                map_style="mapbox://styles/mapbox/dark-v10"
-            )
-
-            st.pydeck_chart(deck)
+                    **Location:** {row['location']}  
+                    **Department:** {row['department']}  
+                    **Issue:** {row['summary']}  
+                    **Reported:** {row['time']}
+                    """
+                )
